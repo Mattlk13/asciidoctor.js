@@ -623,9 +623,10 @@ This is another paragraph.
         expect(appendixSection.getCaption()).to.equal('Appx A: ')
       })
 
-      it('should load a file with bom', function () {
+      it('should load source with BOM from String', function () {
+        const source = '\xef\xbb\xbf= Document Title\n:lang: fr\n:fixtures-dir: spec/fixtures\n\ncontent is in {lang}\n\ninclude::{fixtures-dir}/include.adoc[]'
         const opts = { safe: 'safe', base_dir: testOptions.baseDir }
-        const doc = asciidoctor.load('\xef\xbb\xbf= Document Title\n:lang: fr\n:fixtures-dir: spec/fixtures\n\ncontent is in {lang}\n\ninclude::{fixtures-dir}/include.adoc[]', opts)
+        const doc = asciidoctor.load(source, opts)
         expect(doc.getAttribute('lang')).to.equal('fr')
         const html = doc.convert()
         expect(html).to.include('content is in fr')
@@ -635,10 +636,17 @@ This is another paragraph.
       it('should instantiate an Inline element', function () {
         const opts = { safe: 'safe', base_dir: testOptions.baseDir }
         const doc = asciidoctor.load('= Empty document', opts)
-        const inlineElement = asciidoctor.Inline.create(doc, 'anchor', 'Tigers', { type: 'ref', target: 'tigers' })
+        const inlineElement = asciidoctor.Inline.create(doc, 'anchor', 'Tigers', {
+          type: 'ref',
+          target: 'tigers',
+          attributes: {
+            alt: 'Beautiful tigers'
+          }
+        })
         expect(inlineElement.getType()).to.equal('ref')
         expect(inlineElement.getText()).to.equal('Tigers')
         expect(inlineElement.getTarget()).to.equal('tigers')
+        expect(inlineElement.getAlt()).to.equal('Beautiful tigers')
       })
 
       it('should get document date', function () {
@@ -671,6 +679,20 @@ This is another paragraph.
         expect(localHours).to.be.within(hours - 1, hours + 1)
         expect(localMinutes).to.be.within(minutes - 1, minutes + 1)
         expect(localSeconds).to.be.within(seconds - 10, seconds + 10)
+      })
+
+      it('should get block role', function () {
+        const doc = asciidoctor.load(`= Title
+
+[.foreword]
+== Section with role
+
+== Section without role
+`)
+        const sectionWithRole = doc.getBlocks()[0]
+        expect(sectionWithRole.getRole()).to.equal('foreword')
+        const sectionWithoutRole = doc.getBlocks()[1]
+        expect(sectionWithoutRole.getRole()).to.be.undefined()
       })
 
       describe('Get authors', function () {
@@ -950,6 +972,26 @@ paragraph 3
         expect(secondSection.getCaption()).to.be.undefined()
         expect(secondSection.getAttribute('foo')).to.equal('bar')
       })
+
+      it('should set role', function () {
+        const doc = asciidoctor.load(`= Title
+
+[.foreword]
+== Foreword`)
+        const sectionWithRole = doc.getBlocks()[0]
+        expect(sectionWithRole.getRole()).to.equal('foreword')
+        sectionWithRole.setRole('afterword')
+        expect(sectionWithRole.getRole()).to.equal('afterword')
+
+        sectionWithRole.setRole('afterword last')
+        expect(sectionWithRole.getRole()).to.equal('afterword last')
+
+        sectionWithRole.setRole('lastword', 'closing')
+        expect(sectionWithRole.getRole()).to.equal('lastword closing')
+
+        sectionWithRole.setRole(['finalword', 'conclude'])
+        expect(sectionWithRole.getRole()).to.equal('finalword conclude')
+      })
     })
 
     describe('Creating', function () {
@@ -1123,10 +1165,13 @@ stem:normal[\\\\sqrt{{value}} = 2 \\]]`
           const options = { safe: 'safe', attributes: { 'allow-uri-read': true } }
           const html = asciidoctor.convert(`image::${testOptions.baseDir}/spec/fixtures/images/cc-zero.svg[Embedded,300,opts=inline]`, options)
           expect(html).to.not.include('<?xml version="1.0" encoding="UTF-8" standalone="no"?>')
-          expect(html).to.include('<svg id="svg2" xmlns="http://www.w3.org/2000/svg" version="1.0" width="300px">')
+          if (testOptions.coreVersion.gte('2.0.12')) {
+            expect(html).to.include('<svg id="svg2" xmlns="http://www.w3.org/2000/svg" version="1.0" width="300">')
+          } else {
+            expect(html).to.include('<svg id="svg2" xmlns="http://www.w3.org/2000/svg" version="1.0" width="300px">')
+          }
           expect(html).to.include('<path d="m32 13.58c-10.564 0-13.22 9.97-13.22 18.42-0.002 8.452 2.66 18.42 13.22 18.42 10.565 0 13.22-9.97 13.22-18.42s-2.655-18.42-13.22-18.42zm0 6.95c0.43 0 0.82 0.06 1.19 0.15 0.76 0.66 1.13 1.564 0.4 2.83l-7.034 12.926c-0.216-1.636-0.246-3.24-0.246-4.436 0-3.723 0.257-11.474 5.69-11.474zm5.267 5.957c0.433 1.983 0.433 4.056 0.433 5.513 0 3.72-0.26 11.475-5.7 11.475-0.425 0-0.82-0.045-1.185-0.135-0.075-0.022-0.135-0.04-0.205-0.07-0.11-0.03-0.23-0.07-0.333-0.11-1.21-0.513-1.972-1.444-0.877-3.09l7.867-13.58z"/>')
         })
-
         it('should remove the preamble from embedded SVG', function () {
           const options = { safe: 'safe', attributes: { 'allow-uri-read': true } }
           const html = asciidoctor.convert(`image::${testOptions.baseDir}/spec/fixtures/images/cc-zero.svg[opts=inline]`, options)
@@ -1230,6 +1275,35 @@ This is a preamble!
           }]
         })
         expect(doc.getAttribute('next-section')).to.equal('Third section')
+      })
+
+      it('should convert externalized footnotes', function () {
+        const content = `:fn-hail-and-rainbow: footnote:[The double hail-and-rainbow level makes my toes tingle.]
+:fn-disclaimer: footnote:disclaimer[Opinions are my own.]
+
+The hail-and-rainbow protocol can be initiated at five levels:
+double, tertiary, supernumerary, supermassive, and apocalyptic party.{fn-hail-and-rainbow}
+A bold statement!{fn-disclaimer}
+
+Another outrageous statement.{fn-disclaimer}`
+        const html = asciidoctor.convert(content, { standalone: false })
+        expect(html).to.equal(`<div class="paragraph">
+<p>The hail-and-rainbow protocol can be initiated at five levels:
+double, tertiary, supernumerary, supermassive, and apocalyptic party.<sup class="footnote">[<a id="_footnoteref_1" class="footnote" href="#_footnotedef_1" title="View footnote.">1</a>]</sup>
+A bold statement!<sup class="footnote" id="_footnote_disclaimer">[<a id="_footnoteref_2" class="footnote" href="#_footnotedef_2" title="View footnote.">2</a>]</sup></p>
+</div>
+<div class="paragraph">
+<p>Another outrageous statement.<sup class="footnoteref">[<a class="footnote" href="#_footnotedef_2" title="View footnote.">2</a>]</sup></p>
+</div>
+<div id="footnotes">
+<hr>
+<div class="footnote" id="_footnotedef_1">
+<a href="#_footnoteref_1">1</a>. The double hail-and-rainbow level makes my toes tingle.
+</div>
+<div class="footnote" id="_footnotedef_2">
+<a href="#_footnoteref_2">2</a>. Opinions are my own.
+</div>
+</div>`)
       })
     })
 
@@ -1812,6 +1886,7 @@ America/New_York
         expect(html).to.include('<style>pre.prism{background-color: lightgrey}</style>')
       })
     })
+
     describe('Table', function () {
       it('should create a table, a column and a cell', function () {
         try {

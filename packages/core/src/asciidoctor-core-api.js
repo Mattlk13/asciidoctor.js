@@ -84,15 +84,23 @@ function initializeClass (superClass, className, functions, defaultFunctions, ar
           if (defaultFunctions && Object.prototype.hasOwnProperty.call(defaultFunctions, functionName)) {
             defaultFunctionsOverridden[functionName] = true
           }
-          Opal.def(scope, '$' + functionName, function () {
+          let $function
+          Opal.def(scope, '$' + functionName, ($function = function () {
             let args
             if (argProxyFunctions && Object.prototype.hasOwnProperty.call(argProxyFunctions, functionName)) {
               args = argProxyFunctions[functionName](arguments)
             } else {
               args = arguments
             }
+            // append Ruby block as the final argument
+            const $block = $function.$$p
+            if ($block) {
+              args[args.length] = function () { return Opal.yield1($block) }
+              args.length += 1
+              $function.$$p = null
+            }
             return userFunction.apply(this, args)
-          })
+          }))
         }
       }(functionName))
     }
@@ -632,6 +640,15 @@ AbstractBlock.prototype.hasTitle = function () {
   return this['$title?']()
 }
 
+/**
+ * Returns the converted alt text for this block image.
+ * @returns {string} - the {string} value of the alt attribute with XML special character and replacement substitutions applied.
+ * @memberof AbstractBlock
+ */
+AbstractBlock.prototype.getAlt = function () {
+  return this.$alt()
+}
+
 // Section API
 
 /**
@@ -864,7 +881,8 @@ AbstractNode.prototype.resolveSubstitutions = function (subs, type, defaults, su
   if (typeof subject === 'undefined') {
     subject = Opal.nil
   }
-  return this.$resolve_subs(subs, type, defaults, subject)
+  const value = this.$resolve_subs(subs, type, defaults, subject)
+  return value === Opal.nil ? undefined : value
 }
 
 /**
@@ -948,8 +966,7 @@ AbstractNode.prototype.hasAttribute = function (name) {
  * @memberof AbstractNode
  */
 AbstractNode.prototype.isAttribute = function (name, expectedValue, fallbackName) {
-  const result = this['$attr?'](name, expectedValue, fallbackName)
-  return result === Opal.nil ? false : result
+  return this['$attr?'](name, expectedValue, fallbackName)
 }
 
 /**
@@ -1035,7 +1052,23 @@ AbstractNode.prototype.isRole = function (expectedValue) {
  * @memberof AbstractNode
  */
 AbstractNode.prototype.getRole = function () {
-  return this.$role()
+  const role = this.$role()
+  return role === Opal.nil ? undefined : role
+}
+
+/**
+ * Sets the value of the role attribute on this node.
+ *
+ * @param {...string|Array<string>} names - A single role name, a space-separated String of role names, an Array of role names or a list of role names
+ *
+ * @returns {string} - the value of the role attribute
+ * @memberof AbstractNode
+ */
+AbstractNode.prototype.setRole = function (names) {
+  if (Array.isArray(names) || (typeof names === 'string' && arguments.length === 1)) {
+    return this['$role='](names)
+  }
+  return this['$role='](Array.from(arguments))
 }
 
 /**
@@ -2309,7 +2342,7 @@ const Inline = Opal.Asciidoctor.Inline
  * @memberof Inline
  */
 Inline.create = function (parent, context, text, opts) {
-  return this.$new(parent, context, text, toHash(opts))
+  return this.$new(parent, context, text, prepareOptions(opts))
 }
 
 /**
@@ -2355,6 +2388,16 @@ Inline.prototype.getType = function () {
 Inline.prototype.getTarget = function () {
   const target = this.$target()
   return target === Opal.nil ? undefined : target
+}
+
+/**
+ * Returns the converted alt text for this inline image.
+ *
+ * @returns {string} - the String value of the alt attribute.
+ * @memberof Inline
+ */
+Inline.prototype.getAlt = function () {
+  return this.$alt()
 }
 
 // List API
@@ -2727,7 +2770,7 @@ LoggerManager.getLogger = function () {
  * @memberof LoggerManager
  */
 LoggerManager.setLogger = function (logger) {
-  this.logger = logger
+  this['$logger='](logger)
 }
 
 /**

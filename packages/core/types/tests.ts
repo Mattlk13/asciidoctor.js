@@ -460,6 +460,33 @@ assert(html === `<div class="paragraph">
 <p><a href="https://github.com/mojavelinux">@mojavelinux</a></p>
 </div>`);
 
+const docWithSectionsWithAndWithoutRole = processor.load(`= Title
+
+[.foreword]
+== Section with role
+
+== Section without role
+`);
+const sectionWithRoleForeword = docWithSectionsWithAndWithoutRole.getBlocks()[0];
+assert(sectionWithRoleForeword.getRole() === 'foreword');
+const sectionWithoutRole = docWithSectionsWithAndWithoutRole.getBlocks()[1];
+assert(sectionWithoutRole.getRole() === undefined);
+
+const docWithSingleSection = processor.load(`= Title
+
+[.foreword]
+== Foreword`);
+const sectionWithRole = docWithSingleSection.getBlocks()[0];
+assert(sectionWithRole.getRole() === 'foreword');
+sectionWithRole.setRole('afterword');
+assert(sectionWithRole.getRole() === 'afterword');
+sectionWithRole.setRole('afterword last');
+assert(sectionWithRole.getRole() === 'afterword last');
+sectionWithRole.setRole('lastword', 'closing');
+assert(sectionWithRole.getRole() === 'lastword closing');
+sectionWithRole.setRole(['finalword', 'conclude']);
+assert(sectionWithRole.getRole() === 'finalword conclude');
+
 const docWithImage = processor.load('img::image-name[]', opts);
 let images = docWithImage.findBy((b) => b.getContext() === 'image');
 assert(images.length === 1);
@@ -798,11 +825,23 @@ assert(html.includes(`<pre lang="ruby" class="prettyprint"><code><span class="ha
 </span></code></pre>`));
 assert(html.includes('<pre>Europe/London\nAmerica/New_York</pre>'));
 
+let timings = processor.Timings.create();
+processor.convert('Hello *world*', {timings});
+timings.printReport();
+
+timings = processor.Timings.create();
 let memoryLogger = processor.MemoryLogger.create();
-const timings = processor.Timings.create();
+processor.convert('Hello *world*', {timings});
+timings.printReport(memoryLogger);
+let messages = memoryLogger.getMessages();
+assert(messages.length === 3);
+assert(messages[0].getSeverity() === 'INFO');
+
+timings = processor.Timings.create();
+memoryLogger = processor.MemoryLogger.create();
 processor.convert('Hello *world*', {timings});
 timings.printReport(memoryLogger, 'stdin');
-const messages = memoryLogger.getMessages();
+messages = memoryLogger.getMessages();
 assert(messages.length === 4);
 assert(messages[0].getSeverity() === 'INFO');
 assert(messages[0].getText() === 'Input file: stdin');
@@ -939,11 +978,15 @@ assert(warnMessage.severity === 2);
 assert(warnMessage.message === 'hi');
 assert(warnMessage.progname === 'asciidoctor.js');
 
+function isError(error: any): error is NodeJS.ErrnoException {
+    return error instanceof Error;
+}
+
 function truncateFile(path: string) {
   try {
     fs.truncateSync(path, 0); // file must be empty
   } catch (err) {
-    if (err.code === 'ENOENT') {
+    if (isError(err) && err.code === 'ENOENT') {
       // it's OK, if the file does not exists
     }
   }
@@ -984,6 +1027,17 @@ intro
     processor.LoggerManager.setLogger(defaultLogger);
   }
 })();
+
+const options = { attributes: 'sectnums' };
+const docWithOptions = processor.load('== Test', options);
+assert(docWithOptions.getAttribute('sectnums') === '');
+assert(docWithOptions.isAttribute('sectnums'));
+assert(docWithOptions.isAttribute('sectnums', ''));
+assert(!docWithOptions.isAttribute('sectnums', 'not this'));
+assert(!docWithOptions.isAttribute('foo'));
+assert(!docWithOptions.isAttribute('foo', ''));
+assert(!docWithOptions.isAttribute('foo', 'bar'));
+
 const docWithAttributeOverride = processor.load(`= Title
 :next-section:
 
@@ -1022,6 +1076,20 @@ docWithAttributes.convert();
 assert(docWithAttributes.getAttribute('foo') === 'baz');
 docWithAttributes.restoreAttributes();
 assert(docWithAttributes.getAttribute('foo') === 'bar');
+
+const emptyDoc = processor.load('== Test', {
+  attributes: {
+    mediasdir: 'media',
+    imagesdir: 'img',
+    photosdir: 'photo',
+    iconsdir: 'icon'
+  }
+});
+assert(emptyDoc.getMediaUri('poney.mp4') === 'img/poney.mp4');
+assert(emptyDoc.getMediaUri('poney.mp4', 'mediasdir') === 'media/poney.mp4');
+assert(emptyDoc.getImageUri('whale.jpg') === 'img/whale.jpg');
+assert(emptyDoc.getImageUri('whale.jpg', 'photosdir') === 'photo/whale.jpg');
+assert(emptyDoc.getIconUri('note') === 'icon/note.png');
 
 const docWithTable = processor.load(`
 [%header%footer]
@@ -1072,6 +1140,23 @@ assert(blockSubs4[0] === 'macros');
 const blockSubs5 = paragraphBlock.resolvePassSubstitutions('verbatim');
 assert(blockSubs5.length === 1);
 assert(blockSubs5[0] === 'specialcharacters');
+
+const docWithImages = processor.load(`
+[#img-sunset]
+[caption="Figure 1: ",link=https://www.flickr.com/photos/javh/5448336655]
+image::sunset.jpg[*Sunset & Sunside*,300,200]
+
+image::https://asciidoctor.org/images/octocat.jpg[GitHub mascot]
+
+image::noop.png[alt=]
+
+image::tigers.svg[]`);
+const imageBlocks = docWithImages.findBy((b) => b.getNodeName() === 'image');
+assert(imageBlocks.length === 4);
+assert(imageBlocks[0].getAlt() === '*Sunset &amp; Sunside*');
+assert(imageBlocks[1].getAlt() === 'GitHub mascot');
+assert(imageBlocks[2].getAlt() === '');
+assert(imageBlocks[3].getAlt() === 'tigers');
 
 let converterRegistry = processor.ConverterFactory.getRegistry();
 assert(typeof converterRegistry.html5 === 'function');

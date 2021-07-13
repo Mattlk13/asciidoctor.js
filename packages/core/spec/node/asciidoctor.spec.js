@@ -428,6 +428,35 @@ intro
         expect(errorMessage.message).to.equal('hi')
         expect(errorMessage.progname).to.equal('asciidoctor.js')
       })
+      it('should accept a message as block argument', () => {
+        const messages = []
+        const memoryLogger = asciidoctor.LoggerManager.newLogger('CustomMemoryLogger', {
+          add: function (severity, message, programName, block) {
+            if (typeof block === 'function') {
+              messages.push(block())
+            } else {
+              messages.push(message)
+            }
+          }
+        })
+        const defaultLogger = asciidoctor.LoggerManager.getLogger()
+        try {
+          asciidoctor.LoggerManager.setLogger(memoryLogger)
+          memoryLogger.add('error', 'before', 'asciidoctor.js')
+          asciidoctor.convert('Hello, {name}!', {
+            attributes: {
+              'attribute-missing': 'drop-line'
+            }
+          })
+          memoryLogger.add('error', 'after', 'asciidoctor.js')
+          expect(messages.length).to.equal(3)
+          expect(messages).to.includes('before')
+          expect(messages).to.includes('dropping line containing reference to missing attribute: name')
+          expect(messages).to.includes('after')
+        } finally {
+          asciidoctor.LoggerManager.setLogger(defaultLogger)
+        }
+      })
     })
   }
 
@@ -536,6 +565,15 @@ intro
     it('should get the base directory', () => {
       const doc = asciidoctor.load('== Test')
       expect(doc.getBaseDir()).to.equal(process.cwd().replace(/\\/g, '/'))
+    })
+
+    it('should load source with BOM from Buffer', function () {
+      const source = Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from('= Document Title\n:lang: fr\n\ncontent is in {lang}')]).toString()
+      const opts = { safe: 'safe', base_dir: testOptions.baseDir }
+      const doc = asciidoctor.load(source, opts)
+      expect(doc.getAttribute('lang')).to.equal('fr')
+      const html = doc.convert()
+      expect(html).to.include('content is in fr')
     })
   })
 
@@ -695,6 +733,26 @@ image::https://asciidoctor.org/images/octocat.jpg[GitHub mascot]`
       expect(imagesCatalog[0].getTarget()).to.equal('sunset.jpg')
       expect(imagesCatalog[1].getTarget()).to.equal('https://asciidoctor.org/images/octocat.jpg')
       expect(imagesCatalog[1].getImagesDirectory()).to.be.undefined()
+    })
+
+    it('should get image alt', () => {
+      const input = `
+[#img-sunset]
+[caption="Figure 1: ",link=https://www.flickr.com/photos/javh/5448336655]
+image::sunset.jpg[*Sunset & Sunside*,300,200]
+
+image::https://asciidoctor.org/images/octocat.jpg[GitHub mascot]
+
+image::noop.png[alt=]
+
+image::tigers.svg[]`
+      const doc = asciidoctor.load(input)
+      const imageBlocks = doc.findBy((b) => b.getNodeName() === 'image')
+      expect(imageBlocks.length).to.equal(4)
+      expect(imageBlocks[0].getAlt()).to.equal('*Sunset &amp; Sunside*')
+      expect(imageBlocks[1].getAlt()).to.equal('GitHub mascot')
+      expect(imageBlocks[2].getAlt()).to.equal('')
+      expect(imageBlocks[3].getAlt()).to.equal('tigers')
     })
 
     it('should not get images catalog when catalog_assets is enabled', () => {
@@ -892,6 +950,12 @@ image::https://asciidoctor.org/images/octocat.jpg[GitHub mascot]`
       expect(block.resolveSubstitutions('attributes+', 'block')).to.have.members(['attributes'])
     })
 
+    it('should resolve undefined when subs is empty', () => {
+      const doc = asciidoctor.load('paragraph')
+      const block = doc.getBlocks()[0]
+      expect(block.resolveSubstitutions('', 'block')).to.be.undefined()
+    })
+
     it('should resolve a list of substitutions on a block', () => {
       const doc = asciidoctor.load('paragraph')
       const block = doc.getBlocks()[0]
@@ -939,6 +1003,18 @@ image::https://asciidoctor.org/images/octocat.jpg[GitHub mascot]`
         const warnMessage = memoryLogger.getMessages()[0]
         expect(warnMessage.getSeverity()).to.equal('WARN')
         expect(warnMessage.getText()).to.equal('invalid substitution type for passthrough macro: tomato')
+      } finally {
+        asciidoctor.LoggerManager.setLogger(defaultLogger)
+      }
+    })
+
+    it('should instantiate the specified logger class when the logger value is falsy', () => {
+      const defaultLogger = asciidoctor.LoggerManager.getLogger()
+      try {
+        asciidoctor.LoggerManager.setLogger(null)
+        const initialLogger = asciidoctor.LoggerManager.getLogger()
+        expect(initialLogger).to.be.instanceof(Object)
+        expect(initialLogger.progname).to.equal('asciidoctor')
       } finally {
         asciidoctor.LoggerManager.setLogger(defaultLogger)
       }
@@ -2077,13 +2153,13 @@ header_attribute::foo[bar]`
       expect(html).to.contain('include::nonexistent.adoc[]')
     })
 
-    it('should include file with a relative path (base_dir is not defined)', function () {
+    it('should include file with a relative path (base_dir is not defined)', () => {
       const opts = { safe: 'safe' }
       const html = asciidoctor.convert('include::spec/fixtures/include.adoc[]', opts)
       expect(html).to.contain('include content')
     })
 
-    it('should include file with an absolute path (base_dir is explicitly defined)', function () {
+    it('should include file with an absolute path (base_dir is explicitly defined)', () => {
       const opts = { safe: 'safe', base_dir: testOptions.baseDir }
       const html = asciidoctor.convert('include::' + testOptions.baseDir + '/spec/fixtures/include.adoc[]', opts)
       expect(html).to.contain('include content')
@@ -2102,6 +2178,25 @@ header_attribute::foo[bar]`
       const content = fs.readFileSync(resolveFixture('test.adoc'))
       const html = asciidoctor.convert(content, options)
       expect(html).to.contain('Hello world')
+    })
+
+    it('should start numbering the chapter should at 0', () => {
+      const options = { safe: 'safe' }
+      const html = asciidoctor.convert(`= Document Title
+:chapter-number: -1
+:sectnums:
+:doctype: book
+
+{asciidoctor-version}
+
+== Chapter A
+
+content
+
+== Chapter B
+
+content`, options)
+      expect(html).to.contain('0. Chapter A')
     })
   })
 

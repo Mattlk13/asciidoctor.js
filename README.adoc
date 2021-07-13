@@ -9,7 +9,7 @@ Dan Allen <https://github.com/mojavelinux[@mojavelinux]>; Guillaume Grossetie <h
 ifndef::uri-rel-file-base[:uri-rel-file-base: link:]
 :uri-contribute: {uri-rel-file-base}CONTRIBUTING.adoc
 :uri-contribute-code: {uri-rel-file-base}CONTRIBUTING-CODE.adoc
-:uri-user-manual: https://asciidoctor-docs.netlify.com/asciidoctor.js/
+:uri-user-manual: https://docs.asciidoctor.org/asciidoctor.js/latest/
 :license: {uri-repo}/blob/master/LICENSE
 :experimental:
 :endash:
@@ -18,7 +18,8 @@ ifdef::env-github[]
 image:https://github.com/asciidoctor/asciidoctor.js/workflows/Build/badge.svg[GitHub Actions Status, link=https://github.com/asciidoctor/asciidoctor.js/actions]
 image:https://img.shields.io/npm/v/asciidoctor.svg[npm version, link=https://www.npmjs.org/package/asciidoctor]
 image:https://img.shields.io/npm/dm/asciidoctor[npm stats, link=https://www.npmjs.org/package/asciidoctor]
-image:https://img.shields.io/badge/jsdoc-master-blue.svg[JSDoc, link=http://asciidoctor.github.io/asciidoctor.js/master]
+image:https://img.shields.io/badge/jsdoc-master-blue.svg[JSDoc, link=https://asciidoctor.github.io/asciidoctor.js/master]
+image:https://img.shields.io/badge/zulip-join_chat-brightgreen.svg[project chat,link=https://asciidoctor.zulipchat.com/]
 endif::[]
 
 Asciidoctor.js brings AsciiDoc to the JavaScript world!
