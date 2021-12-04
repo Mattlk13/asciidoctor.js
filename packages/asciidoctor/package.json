@@ -1,6 +1,6 @@
 {
   "name": "asciidoctor",
-  "version": "2.2.0",
+  "version": "3.0.0-dev",
   "description": "A JavaScript AsciiDoc processor, cross-compiled from the Ruby-based AsciiDoc implementation, Asciidoctor, using Opal",
   "main": "index.js",
   "types": "types",
@@ -13,9 +13,8 @@
     "dist": "pkg package.json --out-path dist"
   },
   "engines": {
-    "node": ">=12",
-    "npm": ">=6",
-    "yarn": ">=1.20"
+    "node": ">=14",
+    "npm": ">=7"
   },
   "files": [
     "bin",
@@ -46,10 +45,10 @@
   },
   "homepage": "https://github.com/asciidoctor/asciidoctor.js",
   "dependencies": {
-    "@asciidoctor/cli": "3.4.0",
-    "@asciidoctor/core": "2.2.0"
+    "@asciidoctor/cli": "3.5.0",
+    "@asciidoctor/core": "2.2.5"
   },
   "devDependencies": {
-    "pkg": "^4.4.7"
+    "pkg": "^5.2.1"
   }
 }

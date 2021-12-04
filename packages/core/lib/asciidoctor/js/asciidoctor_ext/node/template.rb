@@ -50,10 +50,11 @@ class Converter::TemplateConverter < Converter::Base
       raise %(Could not find a custom template to handle transform: #{template_name})
     end
 
+    helpers_ctx = @templates['helpers.js'] && @templates['helpers.js'].ctx
     if template_name == 'document'
-      `template.render({node: node, opts: fromHash(opts), helpers: self.helpers})`.strip
+      `template.render({node: node, opts: fromHash(opts), helpers: helpers_ctx})`.strip
     else
-      `template.render({node: node, opts: fromHash(opts), helpers: self.helpers})`.rstrip
+      `template.render({node: node, opts: fromHash(opts), helpers: helpers_ctx})`.rstrip
     end
   end
 
@@ -142,7 +143,7 @@ class Converter::TemplateConverter < Converter::Base
   def node_require module_name
     %x{
       try {
-        return require(#{module_name})
+        return __require__(#{module_name})
       }
       catch (e) {
         throw #{IOError.new "Unable to require the module '#{module_name}', please make sure that the module is installed."}
@@ -160,7 +161,7 @@ class Converter::TemplateConverter < Converter::Base
     }
     # Grab the files in the top level of the directory (do not recurse)
     ::Dir.glob(pattern).select {|match| ::File.file? match }.each do |file|
-      if (basename = ::File.basename file) == 'helpers.js'
+      if (basename = ::File.basename file) == 'helpers.js' || (basename = ::File.basename file) == 'helpers.cjs'
         helpers = file
         next
       elsif (path_segments = basename.split '.').size < 2
@@ -177,7 +178,6 @@ class Converter::TemplateConverter < Converter::Base
         when :nunjucks, :njk
           nunjucks = node_require 'nunjucks'
           %x{
-            var fs = require('fs')
             var env
             if (enginesContext.nunjucks && enginesContext.nunjucks.environment) {
               env = enginesContext.nunjucks.environment
@@ -192,7 +192,6 @@ class Converter::TemplateConverter < Converter::Base
         when :handlebars, :hbs
           handlebars = node_require 'handlebars'
           %x{
-            var fs = require('fs')
             var env
             var opts = self.engine_options['handlebars'] || {}
             if (enginesContext.handlebars && enginesContext.handlebars.environment) {
@@ -206,7 +205,6 @@ class Converter::TemplateConverter < Converter::Base
         when :ejs
           ejs = node_require 'ejs'
           %x{
-            var fs = require('fs')
             var opts = self.engine_options['ejs'] || {}
             opts.filename = file
             // unsupported options
@@ -221,8 +219,8 @@ class Converter::TemplateConverter < Converter::Base
             opts.filename = file
             template = { render: pug.compileFile(file, opts), '$file': function() { return file } }
           }
-        when :js
-          template = `{ render: require(file), '$file': function() { return file } }`
+        when :js, :cjs
+          template = `{ render: __require__(file), '$file': function() { return file } }`
         else
           %x{
             var registry = Opal.Asciidoctor.TemplateEngine.registry
@@ -237,14 +235,14 @@ class Converter::TemplateConverter < Converter::Base
       end
       result[name] = template if template
     end
-    if helpers || ::File.file?(helpers = %(#{template_dir}/helpers.js))
+    if helpers || ::File.file?(helpers = %(#{template_dir}/helpers.js)) || ::File.file?(helpers = %(#{template_dir}/helpers.cjs))
       %x{
-        var helpers = require(helpers)
-        if (typeof helpers.configure === 'function') {
-          helpers.configure(enginesContext)
+        var ctx = __require__(helpers)
+        if (typeof ctx.configure === 'function') {
+          ctx.configure(enginesContext)
         }
       }
-      @helpers = `helpers`
+      result['helpers.js'] = `{ '$file': function() { return helpers }, $ctx: function() { return ctx } }`
     end
     result
   end
